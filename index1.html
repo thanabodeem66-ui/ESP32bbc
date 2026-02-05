@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ESP32 Web BLE</title>
+
+  <meta charset="UTF-8">
+
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<!-- TOP BAR -->
+<div class="topnav">
+  <h1>ESP32 Web BLE Application</h1>
+</div>
+
+
+<!-- MAIN CONTENT -->
+<div class="content">
+
+  <!-- CONNECT CARD -->
+  <div class="card-grid">
+    <div class="card">
+
+      <button id="connect" class="connectButton">
+        Connect to BLE Device
+      </button>
+
+      <button id="disconnect" class="disconnectButton">
+        Disconnect BLE Device
+      </button>
+
+      <p class="gray-label">
+        BLE state:
+        <strong>
+          <span id="state" style="color:red;">Disconnected</span>
+        </strong>
+      </p>
+
+    </div>
+  </div>
+
+
+  <!-- DATA CARDS -->
+  <div class="card-grid">
+
+    <!-- HR -->
+    <div class="card">
+      <h2>❤️ Heart Rate</h2>
+      <p class="reading">
+        <span id="hr">--</span> bpm
+      </p>
+    </div>
+
+    <!-- SpO2 -->
+    <div class="card">
+      <h2>🫁 SpO₂</h2>
+      <p class="reading">
+        <span id="spo2">--</span> %
+      </p>
+    </div>
+
+    <!-- Temp -->
+    <div class="card">
+      <h2>🌡 Temperature</h2>
+      <p class="reading">
+        <span id="tempC">--</span> °C
+      </p>
+      <p class="gray-label">
+        (<span id="tempF">--</span> °F)
+      </p>
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- JAVASCRIPT BLE -->
+<script>
+
+const serviceUUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
+const dataUUID    = "19b10001-e8f2-537e-4f6c-d104768a1214";
+
+let bleServer;
+let dataChar;
+
+
+// CONNECT
+document.getElementById("connect").onclick = async () => {
+
+  const device = await navigator.bluetooth.requestDevice({
+    filters: [{ name: "ESP32bbc" }],
+    optionalServices: [serviceUUID]
+  });
+
+  const server = await device.gatt.connect();
+  bleServer = server;
+
+  document.getElementById("state").innerText = "Connected";
+  document.getElementById("state").style.color = "green";
+
+  const service = await server.getPrimaryService(serviceUUID);
+
+  dataChar = await service.getCharacteristic(dataUUID);
+
+  dataChar.startNotifications();
+
+  dataChar.oncharacteristicvaluechanged = handleData;
+};
+
+
+// DISCONNECT
+document.getElementById("disconnect").onclick = () => {
+
+  if(bleServer){
+    bleServer.disconnect();
+  }
+
+  document.getElementById("state").innerText = "Disconnected";
+  document.getElementById("state").style.color = "red";
+};
+
+
+// RECEIVE DATA
+function handleData(event){
+
+  let text =
+    new TextDecoder().decode(event.target.value);
+
+  console.log(text);
+
+  // Format: HR,SpO2,TempC
+  // Example: 75,98,36.5
+
+  let arr = text.split(",");
+
+  let hr   = arr[0];
+  let spo2 = arr[1];
+  let temp = arr[2];
+
+  let tempF = (temp * 9/5) + 32;
+
+  document.getElementById("hr").innerText = hr;
+  document.getElementById("spo2").innerText = spo2;
+  document.getElementById("tempC").innerText = temp;
+  document.getElementById("tempF").innerText =
+    tempF.toFixed(1);
+}
+
+</script>
+
+</body>
+</html>
