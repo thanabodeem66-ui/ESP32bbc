@@ -91,9 +91,12 @@ let dataChar;
 // CONNECT
 document.getElementById("connect").onclick = async () => {
 
-  const device = await navigator.bluetooth.requestDevice({
-    filters: [{ name: "ESP32bbc" }],
-    optionalServices: [serviceUUID]
+const device = await navigator.bluetooth.requestDevice({
+  filters: [{ name: "ESP32bbc" }],
+  optionalServices: [
+    "19b10000-e8f2-537e-4f6c-d104768a1214",
+    "19b10002-e8f2-537e-4f6c-d104768a1214"
+  ]
   });
 
   const server = await device.gatt.connect();
