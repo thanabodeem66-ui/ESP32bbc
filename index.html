@@ -82,7 +82,7 @@
 <script>
 
 const serviceUUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
-const dataUUID    = "19b10002-e8f2-537e-4f6c-d104768a1214";
+const dataUUID = "19b10002-e8f2-537e-4f6c-d104768a1214";
 
 let bleServer;
 let dataChar;
@@ -102,11 +102,15 @@ document.getElementById("connect").onclick = async () => {
   document.getElementById("state").innerText = "Connected";
   document.getElementById("state").style.color = "green";
 
-  const service = await server.getPrimaryService(serviceUUID);
+const service = await server.getPrimaryService(serviceUUID);
 
-  dataChar = await service.getCharacteristic(dataUUID);
+const characteristics = await service.getCharacteristics();
+console.log("Found chars:", characteristics);
 
-  dataChar.startNotifications();
+dataChar = await service.getCharacteristic(dataUUID);
+
+await dataChar.startNotifications();
+
 
   dataChar.oncharacteristicvaluechanged = handleData;
 };
