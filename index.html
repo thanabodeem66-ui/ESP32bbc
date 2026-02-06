@@ -2,7 +2,6 @@
 <html>
 <head>
   <title>ESP32 Web BLE</title>
-
   <meta charset="UTF-8">
 
   <link rel="icon" href="favicon.ico">
@@ -17,109 +16,142 @@
 </div>
 
 
-<!-- MAIN CONTENT -->
 <div class="content">
 
-  <!-- CONNECT CARD -->
-  <div class="card-grid">
-    <div class="card">
+<!-- CONNECT -->
+<div class="card-grid">
+<div class="card">
 
-      <button id="connect" class="connectButton">
-        Connect to BLE Device
-      </button>
+<button id="connect" class="connectButton">Connect</button>
+<button id="disconnect" class="disconnectButton">Disconnect</button>
 
-      <button id="disconnect" class="disconnectButton">
-        Disconnect BLE Device
-      </button>
+<button class="saveBtn" onclick="saveToSheet()">
+Save to Google Sheet
+</button>
 
-      <p class="gray-label">
-        BLE state:
-        <strong>
-          <span id="state" style="color:red;">Disconnected</span>
-        </strong>
-      </p>
+<p class="gray-label">
+BLE state:
+<strong>
+<span id="state" style="color:red;">Disconnected</span>
+</strong>
+</p>
 
-    </div>
-  </div>
+</div>
+</div>
 
 
-  <!-- DATA CARDS -->
-  <div class="card-grid">
+<!-- DATA -->
+<div class="card-grid">
 
-    <!-- HR -->
-    <div class="card">
-      <h2>❤️ Heart Rate</h2>
-      <p class="reading">
-        <span id="hr">--</span> bpm
-      </p>
-    </div>
+<div class="card">
+<h2>❤️ Heart Rate</h2>
+<p class="reading">
+<span id="hr">--</span> bpm
+</p>
+</div>
 
-    <!-- SpO2 -->
-    <div class="card">
-      <h2>🫁 SpO₂</h2>
-      <p class="reading">
-        <span id="spo2">--</span> %
-      </p>
-    </div>
+<div class="card">
+<h2>🫁 SpO₂</h2>
+<p class="reading">
+<span id="spo2">--</span> %
+</p>
+</div>
 
-    <!-- Temp -->
-    <div class="card">
-      <h2>🌡 Temperature</h2>
-      <p class="reading">
-        <span id="tempC">--</span> °C
-      </p>
-      <p class="gray-label">
-        (<span id="tempF">--</span> °F)
-      </p>
-    </div>
-
-  </div>
+<div class="card">
+<h2>🌡 Temperature</h2>
+<p class="reading">
+<span id="tempC">--</span> °C
+</p>
+<p class="gray-label">
+(<span id="tempF">--</span> °F)
+</p>
+</div>
 
 </div>
 
 
-<!-- JAVASCRIPT BLE -->
+<!-- LED + DATA -->
+<div class="card-grid">
+
+<div class="card">
+<h2>💡 LED</h2>
+
+<button class="ledOn" onclick="ledOn()">ON</button>
+<button class="ledOff" onclick="ledOff()">OFF</button>
+
+</div>
+
+
+<div class="card">
+<h2>📁 Data</h2>
+
+<button class="saveBtn" onclick="saveLocal()">Save</button>
+
+<button class="downloadBtn" onclick="downloadCSV()">
+Download CSV
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- ================= JS ================= -->
 <script>
 
+/* ===== GOOGLE SHEET ===== */
+const GOOGLE_URL =
+"https://script.google.com/macros/s/AKfycbyd0Jgeb0Aml0tN5bZ7zTifiijtF0foIOrT2KsLKDpXohC1tpK7wnpCSyIe8SCgzV-8/exec";
+
+
+/* ===== BLE UUID ===== */
 const serviceUUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
-const dataUUID = "19b10002-e8f2-537e-4f6c-d104768a1214";
+const dataUUID    = "19b10002-e8f2-537e-4f6c-d104768a1214";
+const ledUUID     = "19b10001-e8f2-537e-4f6c-d104768a1214";
+
 
 let bleServer;
 let dataChar;
+let ledChar;
+
+let dataLog = [];
 
 
-// CONNECT
+/* ===== CONNECT ===== */
 document.getElementById("connect").onclick = async () => {
 
-const device = await navigator.bluetooth.requestDevice({
-  filters: [{ name: "ESP32bbc" }],
-  optionalServices: [
-    "19b10000-e8f2-537e-4f6c-d104768a1214",
-    "19b10002-e8f2-537e-4f6c-d104768a1214"
-  ]
-  });
+  try{
 
-  const server = await device.gatt.connect();
-  bleServer = server;
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: "ESP32bbc" }],
+      optionalServices: [serviceUUID]
+    });
 
-  document.getElementById("state").innerText = "Connected";
-  document.getElementById("state").style.color = "green";
+    const server = await device.gatt.connect();
+    bleServer = server;
 
-const service = await server.getPrimaryService(serviceUUID);
+    document.getElementById("state").innerText = "Connected";
+    document.getElementById("state").style.color = "green";
 
-const characteristics = await service.getCharacteristics();
-console.log("Found chars:", characteristics);
+    const service = await server.getPrimaryService(serviceUUID);
 
-dataChar = await service.getCharacteristic(dataUUID);
+    dataChar = await service.getCharacteristic(dataUUID);
+    ledChar  = await service.getCharacteristic(ledUUID);
 
-await dataChar.startNotifications();
+    await dataChar.startNotifications();
 
+    dataChar.oncharacteristicvaluechanged = handleData;
 
-  dataChar.oncharacteristicvaluechanged = handleData;
+  }catch(err){
+    alert("Connect Error");
+    console.log(err);
+  }
 };
 
 
-// DISCONNECT
+/* ===== DISCONNECT ===== */
 document.getElementById("disconnect").onclick = () => {
 
   if(bleServer){
@@ -131,29 +163,132 @@ document.getElementById("disconnect").onclick = () => {
 };
 
 
-// RECEIVE DATA
+/* ===== RECEIVE DATA ===== */
 function handleData(event){
 
-  let text =
-    new TextDecoder().decode(event.target.value);
+  let text = new TextDecoder().decode(event.target.value);
+  console.log("RAW:", text);
 
-  console.log(text);
+  let arr = text.split(",");
 
-  // Format: HR,SpO2,TempC
-  // Example: 75,98,36.5
+  if(arr.length < 4) return;
 
-let arr = text.split(",");
+  let hr    = arr[0];
+  let spo2  = arr[1];
+  let tempC = arr[2];
+  let tempF = arr[3];
 
-let hr    = arr[0];
-let spo2  = arr[1];
-let tempC = arr[2];
-let tempF = arr[3];
 
-document.getElementById("hr").innerText = hr;
-document.getElementById("spo2").innerText = spo2;
-document.getElementById("tempC").innerText = tempC;
-document.getElementById("tempF").innerText = tempF;
+  /* ===== CHECK ERROR ===== */
+
+  // HR + SpO2
+  if(hr=="0" || hr=="NAN" || spo2=="0" || spo2=="NAN"){
+    document.getElementById("hr").innerText   = "--";
+    document.getElementById("spo2").innerText = "--";
+  }else{
+    document.getElementById("hr").innerText   = hr;
+    document.getElementById("spo2").innerText = spo2;
+  }
+
+  // TEMP
+  if(tempC=="NAN" || tempC=="-999"){
+    document.getElementById("tempC").innerText="--";
+    document.getElementById("tempF").innerText="--";
+  }else{
+    document.getElementById("tempC").innerText=tempC;
+    document.getElementById("tempF").innerText=tempF;
+  }
+
+
+  /* ===== SAVE LOG ===== */
+  let time = new Date().toLocaleString();
+
+  dataLog.push([
+    time,
+    hr,
+    spo2,
+    tempC,
+    tempF
+  ]);
 }
+
+
+/* ===== LED ===== */
+async function ledOn(){
+  if(!ledChar) return;
+  await ledChar.writeValue(Uint8Array.of(1));
+}
+
+async function ledOff(){
+  if(!ledChar) return;
+  await ledChar.writeValue(Uint8Array.of(0));
+}
+
+
+/* ===== GOOGLE SHEET ===== */
+function saveToSheet(){
+
+  let data = {
+    time : new Date().toLocaleString(),
+    hr   : document.getElementById("hr").innerText,
+    spo2 : document.getElementById("spo2").innerText,
+    tempC: document.getElementById("tempC").innerText,
+    tempF: document.getElementById("tempF").innerText
+  };
+
+  fetch(GOOGLE_URL,{
+    method:"POST",
+    body: JSON.stringify(data)
+  })
+  .then(r=>r.text())
+  .then(()=>{
+    alert("Saved to Sheet ✅");
+  })
+  .catch(()=>{
+    alert("Save Error ❌");
+  });
+}
+
+
+/* ===== CSV ===== */
+function downloadCSV(){
+
+  let csv = "Time,HR,SpO2,TempC,TempF\n";
+
+  dataLog.forEach(r=>{
+    csv += r.join(",")+"\n";
+  });
+
+  let blob = new Blob([csv],{type:"text/csv"});
+
+  let a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "esp32_data.csv";
+  a.click();
+}
+
+
+/* ===== LOCAL ===== */
+function saveLocal(){
+
+  localStorage.setItem(
+    "esp32Data",
+    JSON.stringify(dataLog)
+  );
+
+  alert("Saved Local ✅");
+}
+
+function loadLocal(){
+
+  let d = localStorage.getItem("esp32Data");
+
+  if(d){
+    dataLog = JSON.parse(d);
+  }
+}
+
+window.onload = loadLocal;
 
 </script>
 
